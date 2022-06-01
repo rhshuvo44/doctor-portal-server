@@ -18,12 +18,10 @@ function verifyToken(req, res, next) {
     if (err) {
       return res.status(403).send({ message: "Forbideen access" });
     }
-    req.decoded = decoded; 
+    req.decoded = decoded;
   });
   next();
 }
-
-
 
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
@@ -40,12 +38,14 @@ async function run() {
     const serviceCollection = client.db("doctor_portal").collection("services");
     const bookingCollection = client.db("doctor_portal").collection("bookings");
     const userCollection = client.db("doctor_portal").collection("users");
+    const doctorCollection = client.db("doctor_portal").collection("doctors");
     app.get("/service", async (req, res) => {
       const query = {};
-      const cursor = serviceCollection.find(query);
+      const cursor = serviceCollection.find(query).project({ name: 1 });
       const services = await cursor.toArray();
       res.send(services);
     });
+
     app.get("/available", async (req, res) => {
       const date = req.query.date || "May 22, 2022";
       const services = await serviceCollection.find().toArray();
@@ -60,6 +60,20 @@ async function run() {
         service.slots = available;
       });
       res.send(services);
+    });
+    app.post("/doctor", async (req, res) => {
+      const doctor = req.body;
+      const result = await doctorCollection.insertOne(doctor);
+      res.send(result);
+    });
+    app.get("/doctor", async (req, res) => {
+      const result = await doctorCollection.find({}).toArray();
+      res.send(result);
+    });
+    app.delete("/doctor/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await doctorCollection.deleteOne({ email: email });
+      res.send(result);
     });
     app.post("/booking", async (req, res) => {
       const booking = req.body;
@@ -105,33 +119,30 @@ async function run() {
       res.send({ result, token });
     });
 
-    app.get('/admin/:email',async(req,res)=>{
-      const email =req.params.email;
-      const user = await userCollection.findOne({email:email});
-      const isAdmin = user.role === 'admin';
-      res.send({admin:isAdmin})
-    })
-
-
-
-    app.put("/user/admin/:email",verifyToken, async (req, res) => {
+    app.get("/admin/:email", async (req, res) => {
       const email = req.params.email;
-      const requester =req.decoded.email ;
-      const requesterAccount = await userCollection.findOne({email:requester});
-      if(requesterAccount.role === 'admin'){
+      const user = await userCollection.findOne({ email: email });
+      const isAdmin = user.role === "admin";
+      res.send({ admin: isAdmin });
+    });
+
+    app.put("/user/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const requester = req.decoded.email;
+      const requesterAccount = await userCollection.findOne({
+        email: requester,
+      });
+      if (requesterAccount.role === "admin") {
         const filter = { email: email };
         const updateDoc = {
           $set: { role: "admin" },
         };
         const result = await userCollection.updateOne(filter, updateDoc);
-  
-        res.send(result);
-      }
-      else{
-      return res.status(403).send({ message: "Forbideen access" });
 
+        res.send(result);
+      } else {
+        return res.status(403).send({ message: "Forbideen access" });
       }
-      
     });
   } finally {
   }
